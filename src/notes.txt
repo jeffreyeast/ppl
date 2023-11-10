@@ -1,0 +1,126 @@
+When we erase a type, should we erase all instances of that type?
+
+Similarly, when we erase a variable that has another variable that references part of the first's value, what should happen to the second?
+
+--------------------
+
+1. FIXED (10/5/23) Entering functions is a pain w/o an editor
+2. Syntax errors in function definitions should give the line number. It prints the line, but this isn't enough.  Also, it'd be nice if the syntax error occurred immediate,
+not after the final line of the function.
+3. FIXED (9.28.23) How do you inspect a datatype to see it's definition?  ? only works on functions.
+4. FIXED (9/29/23) Write doesn't have a default file extension of .ppl
+5. FIXED (9/29/23) when an error occurs inside a function ,it prints the function name and line number, but not the line that caused the error
+6. FIXED (9/28/23) In the spec, you can redefine an operator, and the redefinition overwrites the existing definition. In this implementation, you can only redeefine UDFs (and
+  operators), it won't let you redefine or erase a system definition.
+7. In the spec, assignment doesn't print a result. In this implementation, it does.
+8. FIXED (9/28/23) In the spec, you can redefine an operator, and it overwrites the existing definition. In this implementation, you have to first erase the existing definition.
+9. FIXED (10/1/23)Tests that write to stdout (e.g., tests of print) need to redirect stdout to capture and check the output
+10. DONE (9/28/23) Implement a "Metadata" trait, with an as_description function, and apply it to all the metadata and value types.
+11. FIXED (9/28/23) Alternates should include their own name, so they can be formatted (like MetaStructure and MetaSequence)
+12. FIXED (10/2/23) How to handle printing of recursive structures?
+13. FIXED (10/4/23) BUG: Let a be an array of vectors of arith. Let x be a vector of arith. Assign x (nocopy) to a[1].  1) how do you delink them when you want to? 2) It appears as if
+   you can assign a single number (89) to x or to a[1], and it's accepted (shouldn't be accepted to a[1], that should require a vector). When you assign it to x, shouldn't
+   that break the link between a[1] and x?
+14. FIXED (10/4/23) BUG: Let vector=[1:]int; let a_vector(4,5,6). a[3]_5.6 yields 5.6 in a[3], rather than 5.     Similarly, you can assign a vector to a[3]. There's no enforcement of
+    the declared datatype.
+15. BY DESIGN ? doesn't work on a[3].    Nor on $a[3].
+16. A statement with just a label and no content results in a syntax error
+17. DONE (11/4/23) -->0 in a function (or to any non-existant line number), needs to be redirected to the function return node.
+18. FIXED (10/19/23) The recursion detection doesn't work (it's too aggressive). The example is "as_string" for
+    creating new alternates. We use a local there to hold the string name, and it'same
+    using the address of that local, so the second time through, it claims recursion.
+    Better to use a cycle counter, like you have in other s/w.
+19. FIXED (10/20/23) Currently, there's no way to distinguish by-ref and by-value parameters to a function, as if you don't prefix with $, the node holding the identifier gets
+    executed when it's encountered, rather than keeping it as a reference. Test case: define a function, f. Then ?f -- what's in the node list is IdentifierByValue(f),
+    followed by Op(?).  But f gets invoked when the IdentifierByValue node is hit.  If you use $f, the node list has IdentifierByReference, which works. The solution 
+    is to defer evaluation of the "value" placed onto the stack until it's turned into an argument -- then use the argument's mechanism to decide whether to
+    evaluate it as by-value or by-reference.
+20. FIXED (10/21/23) Currently, we truncate the stack to ensure it isn't bigger than one entry beyond what was started when an invocation starts. But this won't work for functions
+    invoked in the middle of expressions -- the stack has to be back to what it was, plus one entry for the function result. 
+21. FIXED (20/21/23) Currently, if you type in a non-existant variable name, nothing happens (no diagnostic, no output).  This is because the deferral never runs, because no function
+    is called. Perhaps when we're producing the final value-> string transition, we should force the evaluation of symbolic reference values?
+22. FIXED (10/21/23) It looks like invoking nullary functions w/o parens is broken
+23. There's a fundamental flaw in how stopped functions are handled. Right now, the stopped function's invocation object is on the stack. But when you issue
+    an immediate mode command (not just -->), it executes the command and then resumes execution of the stopped function!
+24. BY DESIGN (... denotes a comment) Exec("...") doesn't seem to yield a diagnostic
+25. FIXED (11/4/23) The whole concept of statement blocks is screwed up. First question is: can you (ever) have multiple statements on a line?  If so, then --> is broken, because
+    it uses line numbers. So the answer is probably "no". Next question is: can you have anyone on a line with { or }? In COBOL, no. In C, and maybe every other 
+    language, yes. Right now, nested statement blocks just don't work. 
+26. ^C detection should only be done on statement boundaries; otherwise the value stack will get messed up when they resume the function
+27. IF <cond> <\n> <eos> doesn't generate a syntax error.  Probably because parse_statement_internal accepts empty lines.
+
+
+Multi-statement blocks
+  Parsing is mostly in place
+  Execution: we don't currently have any notion of executing a series of statements, except as a function invocation. We could use that here (make this look like
+    a function call), but that wouldn't support goto's outside of the statement block.  Also, we need a way to return a value from the middle of the block. functions
+    do it by assigning the value to the the function itself, but we don't have a function here. Do we need a RETURN verb? Likewise, we need a BREAK verb.
+    e.g.,
+      {
+        statement1
+        label: statement2
+        if <bool> then 
+        {
+          statement2
+          goto label
+        }
+      }
+
+      Maybe the highest level execution should be execute_statement_block, whereas right now, it's execute or execute_reference.
+
+
+We're making progress. Right now, the StatementBlock has a list of nodes, which are statement roots.  If you can't have more than one statement on a line,
+then we could make this a set of statement numbers.  Note that right now, labels are statement numbers, so this sort of implies you can't have multiple statements
+on a line...although I suspect the current parsing rules allow it.  But right now, there's no efficient way to match StatementBlock's contents with statement numbers,
+which is needed for diagnostics, if nothing else.
+
+Todo: need to load labels into the function's local symbol table. 
+
+Note that labels aren't implemented right now outside of functions.
+
+
+
+OK, StatementBlock is line numbers.
+
+
+Interesting. Up to now, execution was pretty much stack-based -- as you interpret nodes, you call a method, and when the method returns, the interpretation is complete.
+The exception was goto's on an interrupted function -- but it really was the same.  
+
+Right now, we followed that idea for statement blocks, but that doesn't work for interrupted functions -- you have to pop the stack all the way back to the user,
+so you've lost all that context. So you need to maintain a stack of "active" StatementBlocks, with a "current position" for each. Then, on reentry, the goto finds
+the statement block that contains the target line, popping statement block invocations until it finds the target.
+
+So an interator isn't really the complete model for statement block execution, also if it supports the ability to set to an explicit position, it could work. I.e.,
+we want to start with the first statement in the block and continue with the next, until the end, until a goto happens. Then we want to follow the above algorithm for
+finding the correct statement block, popping any we need to. Note that this won't support jumping into a non-active statement block, but do we care? Maybe.
+
+So today's "next_statement" is really bogus -- the next statement can be found by the iterator. What goto does is say "look at the set of lines you know about, and
+set the next current (one to be returned) to the target. If the target isn't one of these, then you need to start popping until you find the right statement block."
+
+
+
+
+
+OK, we're getting closer. I suspect there's a problem when you have nested functions and the most recent one stops.  On the resume, I suspect the most recent
+one will run to completion, while the older ones won't (they're invocations remain on the stack, but there's nobody to run them). 
+
+The problem is we're trying to use the same mechanism for two different purposes -- expression (node) sequencing and statement sequencing.  Not working out too well.
+For statements, unless one is stopped (or errors), you want to run through the current statement block, then pop to the preceeding context and continue running it, until
+you run out of statements, when you're done. If you get an error (in a function or a sequence of statements (not just one standalone statement)) or a stop, you want 
+to suspend execution and return to the user.
+
+
+deriv doesn't work -- it's getting "x not found".  It looks to me like the wrong symbol table (?) is being looked at.  Not sure why. Probably something to do
+with the invocation stack.
+
+
+Currently, we've got a stack per statement.  But migrating values between stacks is getting very tricky.  Part of the problem is that some statements
+produce values (i.e., push on the stack) and some don't (e.g., print). In many cases, the value a statement pushes isn't very interesting (e.g., a goto
+pushes the line number, which is rarely used). But the last statement in a statement block is really producing the value of that statement block, and
+the value of a function is defined to be whatever was assigned to it (as a variable).  So we'd really like to have a single stack (for all the invocations). 
+This would eliminate the problem we're having right now with migrating values between invocations. But when a statement terminates, we'd like to trim the
+stack down to what it was when entered (this implies we don't want to keep the statement's value on the stack). This could be done by keeping the stack size
+in the statement invocation block, and trimming down on statement exit. The problem then is what to do about statements that produce versus those that don't
+produce a value on the stack at Statement End execution. I guess we can tell by looking at the statement invocation block's saved stack size -- if there's
+nothing there, nothing was saved:-)
+
