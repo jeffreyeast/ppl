@@ -10,3 +10,4 @@ num-traits = "0.2"
 signal-hook = "0.3.17"
 strum = "0.25"
 strum_macros = "0.25"
+gtk = { version = "0.7.3", package = "gtk4", features = ["v4_12"] }

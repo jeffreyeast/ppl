@@ -4,7 +4,7 @@ use core::{fmt, panic};
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{execution::{functions::FunctionInvocationBlock, value::Value}, 
-    symbols::metadata::{FunctionDescription, FunctionImplementation}, 
+    symbols::metadata::FunctionDescription, 
     parser::tree::Node, 
     lexical::LineNumber, 
     utility::convert_escape_sequences};
@@ -31,8 +31,6 @@ pub struct Invocation {
     pending_goto_index: RefCell<Option<usize>>,
 }
 
-type StatementBlockTag = usize;
-    
 impl Invocation {
     pub fn as_executable(&self) -> Rc<Executable> {
         self.executable.clone()
@@ -104,7 +102,7 @@ impl Invocation {
         }
     }
 
-    fn get_function_return_line_number(&self) -> LineNumber {
+/*     fn get_function_return_line_number(&self) -> LineNumber {
         if let Some(fib) = &self.fib {
             let f = &fib.function_description.clone();
             if let FunctionImplementation::User(body) = &f.implementation_class {
@@ -113,7 +111,7 @@ impl Invocation {
         }
         panic!("internal error");
     }
-
+ */
     pub fn get_pending_goto_index(&self) -> Option<usize> {
         *self.pending_goto_index.borrow()
     }

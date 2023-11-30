@@ -102,7 +102,6 @@ pub enum CharacterClass {
     SingleQuote,
     DoubleQuote,
     Punctuation,
-    SimpleOperator,
     ComposableOperator,
     WhiteSpace,
     Newline,
@@ -609,7 +608,7 @@ impl<'a,'b: 'a> Lexer<'a,'b> {
                 CharacterClass::DoubleQuote => self.string(tokens)?,
                 CharacterClass::Punctuation | CharacterClass::Other => self.punctuation(tokens)?,
                 CharacterClass::Dollar | CharacterClass::Minus | CharacterClass::Plus | CharacterClass::BackSlash | 
-                CharacterClass::SimpleOperator | CharacterClass::ComposableOperator => self.operator(tokens)?,
+                CharacterClass::ComposableOperator => self.operator(tokens)?,
                 CharacterClass::Newline => self.newline(tokens)?,
                 CharacterClass::WhiteSpace => {
                     self.context.next();
