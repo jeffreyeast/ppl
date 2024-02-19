@@ -10,6 +10,7 @@ use super::options::Options;
 #[derive(Clone, Debug, Display, Eq, Hash, PartialEq, EnumString, EnumIter)]
 #[strum(ascii_case_insensitive)]
 pub enum Feature {
+    Ardmode,
     LineNames,
     StringEscapes,
 }

@@ -10,13 +10,15 @@ pub trait PrettyPrint {
 
 pub enum Node {
     Definition(DefinitionNode),
+    ExecReturn,
     FunctionReturn,
     IdentifierByReference(ReferenceNode),
     IdentifierByValue(ReferenceNode),
     Index(IndexNode),
     Noop,
     Operation(OperationNode),
-    StatementEnd(usize),            // Node index of expression tree root
+    ResolveParameter(ArgumentDescription),
+    StatementEnd(usize),                    // Node index of expression tree root
     StatementLabel(LabelNode),
     Value(Value),
 }
@@ -26,13 +28,15 @@ impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Node::Definition(d) => write!(f, "{}", d),
+            Node::ExecReturn => write!(f, "exec-return"),
             Node::FunctionReturn => write!(f, "return"),
             Node::Index(i) => write!(f, "{}", i),
             Node::Noop => write!(f, "Noop()"),
             Node::Operation(op) => write!(f, "{}", op),
             Node::IdentifierByValue(r) => write!(f, "{}", r),
             Node::IdentifierByReference(r) => write!(f, "${}", r),
-            Node::StatementEnd(r) => write!(f, "<end>{}", r),
+            Node::ResolveParameter(d) => write!(f, "Resolve: {}", d),
+            Node::StatementEnd(r) => write!(f, "<statement-end>{}", r),
             Node::StatementLabel(s) => write!(f, "{}:\t{}", s.name, s.statement_index),
             Node::Value(v) => write!(f, "{}", v),
         }
@@ -43,12 +47,14 @@ impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Node::Definition(def) => write!(f, "Node::Def({:?})", def),
+            Node::ExecReturn => write!(f, "Node::ExecReturn"),
             Node::FunctionReturn => write!(f, "Node::FunctionReturn"),
             Node::Index(idx) => write!(f, "Node::Index({:?})", idx),
             Node::Noop => write!(f, "Node::Noop"),
             Node::Operation(op) => write!(f, "Node::Op({:?})", op),
             Node::IdentifierByValue(id) =>  write!(f, "Node::Id({:?})", id),
             Node::IdentifierByReference(idr) => write!(f, "Node::IdByRef({:?})", idr),
+            Node::ResolveParameter(d) => write!(f, "Node::ResolveParameter: {}", d),
             Node::StatementEnd(r) => write!(f, "Node::StatementEnd({})", r),
             Node::StatementLabel(s) => write!(f, "Node::StatementLabel({})", s),
             Node::Value(v) => write!(f, "Node::Value({:?})", v),
@@ -62,6 +68,7 @@ impl PrettyPrint for Node {
             Node::Definition(d) => {
                 writeln!(f, "{}({}) Node::Definition: {}", padding, node_number, d.name)
             },
+            Node::ExecReturn => writeln!(f, "{}({}) Node::ExecReturn", padding, node_number),
             Node::FunctionReturn => writeln!(f, "{}({}) Node::FunctionReturn", padding, node_number),
             Node::Index(_) =>  {
                 writeln!(f, "{}({})Node::Index", padding, node_number)
@@ -72,6 +79,7 @@ impl PrettyPrint for Node {
             },
             Node::IdentifierByValue(i) => writeln!(f, "{}({}) Node::IdentifierByValue ({})", padding, node_number, i.as_string()),
             Node::IdentifierByReference(i) => writeln!(f, "{}({}) Node::IdentifierByReference (${})", padding, node_number, i.as_string()),
+            Node::ResolveParameter(d) => writeln!(f, "{}({}) Node::ResolveParameter: {}", padding, node_number, d),
             Node::StatementEnd(r) => writeln!(f, "{}({}) Node::StatementEnd({})", padding, node_number, r),
             Node::StatementLabel(l) => {
                 writeln!(f, "{}({}) Node::StatementLabel ({})", padding, node_number, l)
@@ -81,6 +89,24 @@ impl PrettyPrint for Node {
     }
 }
 
+
+pub struct ArgumentDescription {
+    pub function_name: String,
+    pub argument_count: usize,
+    pub argument_number: usize,
+}
+
+impl fmt::Display for ArgumentDescription {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.function_name, self.argument_number)
+    }
+}
+
+impl fmt::Debug for ArgumentDescription {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.function_name, self.argument_number)
+    }
+}
 
 #[derive(Debug)]
 pub enum DefinitionType {
@@ -215,12 +241,6 @@ impl OperationNode {
 
 impl fmt::Display for OperationNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}(...)", self.name.as_str())
-    }
-}
-
-impl fmt::Debug for OperationNode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}(", self.name)?;
         let mut separator = "";
         for arg in &self.actual_arguments {
@@ -228,6 +248,12 @@ impl fmt::Debug for OperationNode {
             separator = ", ";
         }
         write!(f, ")")
+    }
+}
+
+impl fmt::Debug for OperationNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 

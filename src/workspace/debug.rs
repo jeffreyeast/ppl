@@ -16,8 +16,10 @@ pub enum DebugOption {
     Format,
     Function,
     Lex,
+    NodeInvocation,
     Parse,
     StackUsage,
+    ValueStack,
 }
 
 impl DebugOption {

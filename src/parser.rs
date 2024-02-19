@@ -22,7 +22,7 @@ use crate::{execution::{runtime::executable::Executable,
                       name::Name},
             workspace::{debug::DebugOption, {WorkSpace, GeneralSymbol}}};
 
-use self::statementbuilder::StatementBuilder;
+use self::{statementbuilder::StatementBuilder, tree::ArgumentDescription};
 use self::tree::{Node, OperationNode, ReferenceNode, DefinitionNode, DefinitionType, SequenceDefinition, StructureDefinition, StructureMemberDescription, IndexNode};
 use self::scanner::TokenScanner;
 
@@ -114,6 +114,8 @@ impl<'a> Parser<'a> {
 
         self.parse_statement_block_without_braces(&mut token_iterator, &mut executable)?;
 
+        executable.commit();
+
         Ok(Rc::new(executable))
     }
 
@@ -131,6 +133,31 @@ impl<'a> Parser<'a> {
                 return Ok(statement_builder.add_node(Node::Definition(DefinitionNode::from_string(identifier_name, DefinitionType::Alternate(alternate_names)))));
             }
         }
+    }
+
+    pub fn parse_as_exec(&self, source: &str) -> Result<Rc<Executable>,String> {
+        let mut executable = Executable::new(source);
+        let tokens = Lexer::tokenize(source, self.workspace)?;
+        let mut token_iterator = TokenScanner::new(&tokens);
+
+        if self.workspace.debug_options.borrow().is_set(&DebugOption::Lex) {
+            dbg!(&tokens);
+        }
+
+        self.parse_statement_block_without_braces(&mut token_iterator, &mut executable)?;
+
+        //  Append a node to capture the execution value and push it onto the value stack
+
+        let end_position = token_iterator.get_position();
+        let appended_line_number = (executable.get_statement_count() + 1) as LineNumber;
+        let mut statement_builder = StatementBuilder::begin_statement(appended_line_number, end_position.index, &mut executable);
+        statement_builder.add_node(Node::ExecReturn);
+        statement_builder.finish_statement(end_position.index);
+        executable.set_function_return_line_number(appended_line_number);
+
+        executable.commit();
+
+        Ok(Rc::new(executable))
     }
 
     fn parse_atomic_value(&self, token: &Token, statement_builder: &mut StatementBuilder) -> Result<usize,String> {
@@ -164,10 +191,11 @@ impl<'a> Parser<'a> {
 
     fn parse_diadic_operation(&self, token: &Token, token_iterator: &mut TokenScanner, statement_builder: &mut StatementBuilder) -> Result<usize,String> {
         let left = self.parse_indexed_value(token, token_iterator, statement_builder)?;
-
         if let Ok(operator_name) = token_iterator.consume_any_operator() {
             if self.is_diadic_operator(&operator_name) {
-                let right = self.parse_expression(token_iterator, statement_builder)?;
+                let left = statement_builder.add_node(Node::ResolveParameter( ArgumentDescription { function_name: operator_name.clone(), argument_number: 0, argument_count: 2 }));
+                self.parse_expression(token_iterator, statement_builder)?;
+                let right = statement_builder.add_node(Node::ResolveParameter( ArgumentDescription { function_name: operator_name.clone(), argument_number: 1, argument_count: 2 }));
                 statement_builder.add_node(Node::Operation(OperationNode::from_string(&operator_name, vec![ left, right] )));
                 Ok(left)
             } else {
@@ -203,18 +231,21 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_function_call(&self, identifier_name: &String, token_iterator: &mut TokenScanner, statement_builder: &mut StatementBuilder) -> Result<usize,String> {
-        let mut argument_list = Vec::new();
+        let mut parameter_list = Vec::new();
+        let mut resolve_parameter_list = Vec::new();
         let token = token_iterator.peek().expect("internal error").clone();
 
         if let TokenType::Punctuation(ref p) = token.token_type {
             if p == ")" {
                 token_iterator.next();
-                return Ok(statement_builder.add_node(Node::Operation(OperationNode::from_string(&identifier_name, argument_list))));
+                return Ok(statement_builder.add_node(Node::Operation(OperationNode::from_string(&identifier_name, parameter_list))));
             }
         }
 
         loop {
-            argument_list.push(self.parse_expression(token_iterator, statement_builder)?);
+            parameter_list.push(self.parse_expression(token_iterator, statement_builder)?);
+            resolve_parameter_list.push(statement_builder.add_node(Node::ResolveParameter(
+                ArgumentDescription { function_name: identifier_name.clone(), argument_number: resolve_parameter_list.len(), argument_count: 0 })));
 
             let token = token_iterator.peek().expect("internal error").clone();
             match token.token_type {
@@ -222,8 +253,18 @@ impl<'a> Parser<'a> {
                     match p.as_str() {
                         ")" => {
                             token_iterator.next();
-                            let first_argument_index = argument_list[0];
-                            statement_builder.add_node(Node::Operation(OperationNode::from_string(&identifier_name, argument_list)));
+
+                            //  Go back and fix up the argument counts in the ResolveParameter nodes. This is needed for name resolution in execution.
+
+                            for i in 0..resolve_parameter_list.len() {
+                                statement_builder.as_executable().replace_node(resolve_parameter_list[i], 
+                                    Node::ResolveParameter(ArgumentDescription { function_name: identifier_name.clone(), argument_number: i, argument_count: resolve_parameter_list.len() }));
+                            }
+
+                            //  And generate the function call itself
+
+                            let first_argument_index = parameter_list[0];
+                            statement_builder.add_node(Node::Operation(OperationNode::from_string(&identifier_name, parameter_list)));
                             return Ok(first_argument_index);
                         },
                         "," => {
@@ -295,7 +336,7 @@ impl<'a> Parser<'a> {
 
         if function_executable.get_function_return_line_number().is_none() {
             let end_position = token_iterator.get_position();
-            let appended_line_number = (function_executable.get_statement_count() + 1) as LineNumber;
+            let appended_line_number = (end_position.line_number + 1) as LineNumber;
             let mut statement_builder = StatementBuilder::begin_statement(appended_line_number, end_position.index, &mut function_executable);
             statement_builder.add_node(Node::FunctionReturn);
             statement_builder.finish_statement(end_position.index);
@@ -303,6 +344,7 @@ impl<'a> Parser<'a> {
         }
 
         let labels = self.construct_label_database(&function_executable)?;
+        function_executable.commit();
         Ok(statement_builder.add_node(Node::Definition(DefinitionNode::from_string(identifier_name, DefinitionType::Function(FunctionDescription {
             name: Name::from_string(identifier_name),
             arguments: FunctionArgumentList::Fixed(formal_args),
@@ -343,7 +385,8 @@ impl<'a> Parser<'a> {
         //  The IF keyword has already been scanned
 
         let bool_expression_index = self.parse_expression(token_iterator, statement_builder)?;
-        let condition_index = statement_builder.add_node(Node::Operation(OperationNode::from_str("-", vec![bool_expression_index] )));
+        statement_builder.add_node(Node::Operation(OperationNode::from_str("-", vec![bool_expression_index] )));
+        let condition_index = statement_builder.add_node(Node::ResolveParameter(ArgumentDescription { function_name: String::from("cbranch"), argument_count: 2, argument_number: 0 }));
         let condition_dispatch_destination_index = statement_builder.add_node(Node::Value(Value::Int(0)));
         statement_builder.add_node(Node::Operation(OperationNode::from_str("cbranch", vec![condition_index, condition_dispatch_destination_index])));
         statement_builder.add_node(Node::StatementEnd(0));
@@ -405,8 +448,13 @@ impl<'a> Parser<'a> {
 
     fn parse_monadic_operator(&self, token: &Token, token_iterator: &mut TokenScanner, statement_builder: &mut StatementBuilder) -> Result<usize,String> {
         if self.is_monadic_operator(token.string_value.as_str()) {
-            let argument_index = self.parse_expression(token_iterator, statement_builder)?;
-            return Ok(statement_builder.add_node(Node::Operation( OperationNode::from_string(&token.string_value, vec![ argument_index ]))))
+            token_iterator.push_iterator();
+            if self.parse_expression(token_iterator, statement_builder).is_ok() {
+                token_iterator.discard_saved_iterator();
+                let argument_index = statement_builder.add_node(Node::ResolveParameter(ArgumentDescription { function_name: token.string_value.clone(), argument_count: 1, argument_number: 0 }));
+                return Ok(statement_builder.add_node(Node::Operation( OperationNode::from_string(&token.string_value, vec![ argument_index ]))))
+            }
+            token_iterator.pop_iterator();
         }
         self.parse_nullary_operator(&token, statement_builder)
     }
@@ -455,7 +503,6 @@ impl<'a> Parser<'a> {
         match self.parse_statement_internal(statement_builder.as_starting_line_number(), token_iterator, &mut statement_builder)? {
             None => Ok(None),
             Some(statement_root_index) => {
-                statement_builder.add_node(Node::StatementEnd(statement_root_index));
                 let statement_ending_position = &token_iterator.peek().unwrap().starting_position;
         
                 statement_builder.finish_statement(statement_ending_position.index);
@@ -523,8 +570,10 @@ impl<'a> Parser<'a> {
                 return self.error(&token_iterator.peek().unwrap().starting_position, "expected newline");
             }
             if let Ok(label_index) =  label_index_result {
+                statement_builder.add_node(Node::StatementEnd(label_index));
                 Ok(Some(label_index))
             } else {
+                statement_builder.add_node(Node::StatementEnd(expression_index));
                 Ok(Some(expression_index))
             }
         }
@@ -630,7 +679,9 @@ impl<'a> Parser<'a> {
 
         if token_iterator.consume_punctuation("]").is_err() {
             loop {
-                members.push(self.parse_expression(token_iterator, statement_builder)?);
+                self.parse_expression(token_iterator, statement_builder)?;
+                members.push(statement_builder.add_node(Node::ResolveParameter(ArgumentDescription { function_name: String::from("tuple"), argument_count: 0, argument_number: members.len()  })));
+
                 if token_iterator.consume_punctuation(",").is_err() {
                     if token_iterator.consume_punctuation("]").is_ok() {
                         break;
@@ -680,7 +731,8 @@ impl<'a> Parser<'a> {
         //  The WHILE keyword has already been scanned
 
         let bool_expression_index = self.parse_expression(token_iterator, statement_builder)?;
-        let condition_index = statement_builder.add_node(Node::Operation(OperationNode::from_str("-", vec![bool_expression_index] )));
+        statement_builder.add_node(Node::Operation(OperationNode::from_str("-", vec![bool_expression_index] )));
+        let condition_index = statement_builder.add_node(Node::ResolveParameter(ArgumentDescription {function_name:String::from("cbranch"), argument_count: 2, argument_number: 0 }));
         let condition_dispatch_destination_index = statement_builder.add_node(Node::Value(Value::Int(0)));
         statement_builder.add_node(Node::Operation(OperationNode::from_str("cbranch", vec![condition_index, condition_dispatch_destination_index])));
         statement_builder.add_node(Node::StatementEnd(0));

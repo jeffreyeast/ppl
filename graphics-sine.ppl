@@ -1,0 +1,99 @@
+$range = [min:real, max:real]
+phys.x_range(real(-600), real(600))
+log.x_range(real(0), real(100))
+log.y_range(real(-1.1), real(1.1))
+margin.y_range(real(30), real(10))
+phys.y_range(real(-600), real(600))
+margin.x_range(real(40), real(30))
+{
+$line(x1,y1,x2,y2) ;dx,dy
+setpoint(scalex(x1),scaley(y1))
+dx_real(x2-x1)*real(phys.x[max]-phys.x[min])/real(log.x[max]-log.x[min])
+dy_real(y2-y1)*real(phys.y[max]-phys.y[min])/real(log.y[max]-log.y[min])
+solidvec(dx,dy)
+}
+{
+$scaley(y)
+scaley_scale(y,margin.y,phys.y,log.y)
+
+}
+{
+$scale(value,margin,phys,log)
+scale_int(real(phys[min] + margin[min]) + (real(value)-real(log[min])) * (real(phys[max]-margin[max])-real(phys[min] + margin[min]))/(real(log[max])-real(log[min])))
+}
+{
+$draw.x.tics(count) ;x,delta
+x_log.x[min]
+delta_(log.x[max] - log.x[min]) / (count - 1)
+loop: draw.x.tic(x)
+x_x + delta
+(x <= log.x[max]) --> loop
+}
+{
+$plot ;x,y
+ardmode
+clearscreen
+drawaxies
+x_log.x[min]
+loop: y_f(x)
+ardmode
+setpoint(scalex(x),scaley(y))
+print(".")
+x_x+1
+(x<log.x[max]) --> loop
+}
+{
+$draw.y.tics(count) ;y,delta
+y_log.y[min]
+delta_(log.y[max] - log.y[min]) / (count - 1)
+loop: draw.y.tic(y)
+y_y + delta
+(y <= log.y[max]) --> loop
+}
+{
+$dottedline(x1,y1,x2,y2) ;dx,dy
+setpoint(scalex(x1),scaley(y1))
+dx_real(x2-x1)*real(phys.x[max]-phys.x[min])/real(log.x[max]-log.x[min])
+dy_real(y2-y1)*real(phys.y[max]-phys.y[min])/real(log.y[max]-log.y[min])
+dottedvec(dx,dy)
+}
+{
+$draw.x.tic(x)
+setpoint(scalex(x), phys.y[min] + (margin.y[min] / 2))
+solidvec(0, margin.y[min] / 2)
+setpoint(scalex(x) - 10, phys.y[min] + 1)
+print(x)
+}
+{
+$scalex(x)
+scalex_scale(x,margin.x,phys.x,log.x)
+
+}
+{
+$draw.y.tic(y)
+setpoint(phys.x[min] + (margin.x[min] / 2), scaley(y))
+solidvec(margin.x[min] / 2, 0)
+setpoint(phys.x[min], scaley(y) - 3)
+print(y)
+}
+{
+$drawaxies
+...Draw the axies as wide lines
+
+setlinewidth(5)
+setpoint(phys.x[min] + (margin.x[min] / 2),phys.y[min] + margin.y[min])
+solidvec(phys.x[max] - (phys.x[min] + (margin.x[min] / 2)),0)
+setpoint(phys.x[min] + margin.x[min],phys.y[min] + (margin.y[min] / 2))
+solidvec(0,phys.y[max]-(phys.y[min] + (margin.y[min] / 2)))
+setlinewidth(1)
+
+...Now label the tic marks along the axies
+
+draw.x.tics(3)
+draw.y.tics(3)
+}
+{
+$f(x)
+f_sin(x/(((log.x[max])/4)/3.14159))
+
+}

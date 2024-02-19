@@ -2,6 +2,7 @@
 
 
 pub mod execution;
+mod graphics;
 mod lexical;
 mod parser;
 mod sequencer;

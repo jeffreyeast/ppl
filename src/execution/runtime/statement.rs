@@ -22,12 +22,16 @@ impl Statement {
         self.node_indices.as_members().first().unwrap().get_first()
     }
 
-    pub fn as_node_indices(&self) -> &Set<usize> {
-        &self.node_indices
+    pub fn as_last_node_index(&self) -> usize {
+        self.node_indices.as_members().last().unwrap().get_last()
     }
 
     pub fn as_line_number(&self) -> LineNumber {
         self.line_number
+    }
+
+    pub fn as_node_indices(&self) -> &Set<usize> {
+        &self.node_indices
     }
 
     pub fn as_second_node_index(&self) -> Option<usize> {

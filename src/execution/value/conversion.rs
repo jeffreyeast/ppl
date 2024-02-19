@@ -60,10 +60,10 @@ impl Value {
             Value::Real(v) => Ok(*v as f32),
             Value::Double(v) => Ok(*v as f32),
             Value::Char(c) => {
-                if c.is_digit(10) {
-                    Ok(c.to_digit(10).unwrap() as f32)
+                if c.is_ascii() {
+                    Ok((*c as u8) as f32)
                 } else {
-                    Err(format!("'{} is not a digit", c)) 
+                    Err(format!("'{}' is not an ASCII character", c))
                 }
             },
             Value::Symbol(symbol) => {
@@ -88,10 +88,10 @@ impl Value {
             Value::Real(v) => Ok(*v as f64),
             Value::Double(v) => Ok(*v as f64),
             Value::Char(c) => {
-                if c.is_digit(10) {
-                    Ok(c.to_digit(10).unwrap() as f64)
+                if c.is_ascii() {
+                    Ok((*c as u8) as f64)
                 } else {
-                    Err(format!("'{} is not a digit", c)) 
+                    Err(format!("'{}' is not an ASCII character", c))
                 }
             },
             Value::Symbol(symbol) => {
@@ -116,10 +116,10 @@ impl Value {
             Value::Real(v) => Ok(*v as i32),
             Value::Double(v) => Ok(*v as i32),
             Value::Char(c) => {
-                if c.is_digit(10) {
-                    Ok(c.to_digit(10).unwrap() as i32)
+                if c.is_ascii() {
+                    Ok(*c as i32)
                 } else {
-                    Err(format!("'{} is not a digit", c)) 
+                    Err(format!("'{}' is not an ASCII character", c))
                 }
             },
             Value::Symbol(symbol) => {
@@ -144,10 +144,10 @@ impl Value {
             Value::Real(v) => Ok(*v as i64),
             Value::Double(v) => Ok(*v as i64),
             Value::Char(c) => {
-                if c.is_digit(10) {
-                    Ok(c.to_digit(10).unwrap() as i64)
+                if c.is_ascii() {
+                    Ok(*c as i64)
                 } else {
-                    Err(format!("'{} is not a digit", c)) 
+                    Err(format!("'{}' is not an ASCII character", c))
                 }
             },
             Value::Symbol(symbol) => {
@@ -176,10 +176,10 @@ impl Value {
             Value::Real(v) => Ok(*v as u32),
             Value::Double(v) => Ok(*v as u32),
             Value::Char(c) => {
-                if c.is_digit(10) {
-                    Ok(c.to_digit(10).unwrap() as u32)
+                if c.is_ascii()  {
+                    Ok(*c as u32)
                 } else {
-                    Err(format!("'{} is not a digit", c)) 
+                    Err(format!("'{}' is not an ASCII character", c))
                 }
             },
             Value::Symbol(symbol) => {
@@ -257,10 +257,10 @@ impl Value {
             Value::Real(v) => Ok(*v as usize),
             Value::Double(v) => Ok(*v as usize),
             Value::Char(c) => {
-                if c.is_digit(10) {
-                    Ok(c.to_digit(10).unwrap() as usize)
+                if c.is_ascii() {
+                    Ok((*c as u8) as usize)
                 } else {
-                    Err(format!("'{} is not a digit", c)) 
+                    Err(format!("'{}' is not an ASCII character", c))
                 }
             },
             Value::Symbol(symbol) => {

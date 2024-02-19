@@ -165,6 +165,13 @@ impl Help for RootDataType {
         }        
     }
 
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
+    }
+
     fn pretty_print(&self) -> String {
         match self {
             RootDataType::Int => String::from("int"),

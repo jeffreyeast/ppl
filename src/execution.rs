@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::{
     workspace::{WorkSpace, debug::DebugOption, GeneralSymbol}, 
     execution::value::Value,
-    parser::{ Parser, tree::{Node, OperationNode, ReferenceNode }}, 
+    parser::{ Parser, tree::{ArgumentDescription, Node, OperationNode, ReferenceNode }}, 
     symbols::metadata::{ FunctionClass, FunctionDescription, FunctionImplementation, VariableDescription, SelectorDescription, MetaDataType, FunctionArgumentList, ArgumentMechanism}, sequencer,
     utility::convert_escape_sequences};
 
@@ -25,41 +25,19 @@ pub mod value;
 
 
 fn assemble_argument_list(f: &Rc<FunctionDescription>, actual_argument_list: &Vec<usize>, workspace: &WorkSpace) -> Result<Vec<Value>,String> {
-     let mut actual_argument_values = Vec::new();
+    let mut actual_argument_values = Vec::new();
     match f.arguments {
         FunctionArgumentList::Fixed(ref formal_args) => {
             if formal_args.len() != actual_argument_list.len() {
                 return Err(format!("Incorrect number of arguments to {}", f.name));
             }
-            for i in (0..actual_argument_list.len()).rev() {
-                let formal_arg = &formal_args[i];
-                let formal_arg_datatype = workspace.resolve_datatype(&formal_arg.datatype.as_string())?;
-                match formal_arg.mechanism {
-                    ArgumentMechanism::ByReference | ArgumentMechanism::ByReferenceCreateIfNeeded => {
-                        actual_argument_values.push(workspace.pop_value());
-                    },
-                    ArgumentMechanism::ByValue => {
-                        actual_argument_values.push(formal_arg_datatype.coerce(&workspace.pop_value(), workspace)?);
-                    },
-                }
+            for _i in actual_argument_list {
+                actual_argument_values.push(workspace.pop_value());
             }
         },
-        FunctionArgumentList::Varying(ref mechanism) => {
+        FunctionArgumentList::Varying(_) => {
             for _i in actual_argument_list {
-                match  mechanism {
-                    ArgumentMechanism::ByReference | ArgumentMechanism::ByReferenceCreateIfNeeded => {
-                        actual_argument_values.push(workspace.pop_value());
-                    },
-                    ArgumentMechanism::ByValue => {
-                        match workspace.pop_value() {
-                            Value::Selector(ref selector) => return Err(format!("{} is not a value", selector)),
-                            Value::Symbol(ref symbol) => actual_argument_values.push(evaluate_identifier_by_value(symbol, workspace)?),
-                            Value::ValueByReference(cell_ref) => actual_argument_values.push(cell_ref.cell.borrow().as_ref_to_value().clone()),
-                            Value::LogicalLink(link) => actual_argument_values.push(link.as_ref_to_value().clone()),
-                            value => actual_argument_values.push(value),
-                        }
-                    },
-                }
+                actual_argument_values.push(workspace.pop_value());
             }
         },
     }
@@ -136,13 +114,8 @@ pub fn evaluate_identifier_by_value(reference: &SymbolicReference, workspace: &W
 }
 
 pub fn evaluate_internal(s: &str, workspace: &WorkSpace) -> Result<String,String> {
-    let parser = Parser::new(s, workspace);
-    let executable = parser.parse(s)?;
-    if workspace.debug_options.borrow().is_set(&DebugOption::Parse) {
-        dbg!(&executable);
-    }
-
-    match sequencer::start_execution(&executable, workspace) {
+    prepare(s, workspace)?;
+    match sequencer::start_execution(workspace) {
         Ok(r) => {
             recursion_detector::Cycle::start();
             Ok(format!("{}", r.unwrap_or(Value::Empty)))
@@ -175,12 +148,14 @@ pub fn execute(node: &Node, workspace: &WorkSpace) -> Result<(),String>{
 
     match node {
         Node::Definition(d) => definition::execute_definition(d, workspace)?,
+        Node::ExecReturn => execute_exec_return(workspace)?,
         Node::FunctionReturn => execute_function_return(workspace)?,
         Node::Index(_) => execute_selection_by_reference(workspace)?,
         Node::Noop => {},
         Node::Operation(op) =>  execute_operation(op, workspace)?,
         Node::IdentifierByValue(r) => execute_identifier_by_value(r, workspace)?,
         Node::IdentifierByReference(r) => execute_identifier_by_reference(r, workspace)?,
+        Node::ResolveParameter(d) => execute_resolve_parameter(d, workspace)?,
         Node::StatementEnd(_) => execute_statement_end(workspace)?,
         Node::StatementLabel(_) => {},
         Node::Value(v) => execute_value(v, workspace)?,
@@ -189,21 +164,14 @@ pub fn execute(node: &Node, workspace: &WorkSpace) -> Result<(),String>{
     Ok(())
 }
 
-// fn execute_by_reference(node: &Node, workspace: &WorkSpace) -> Result<(),String>{
-
-//     //  This is a much more restrictive form of execution, as the result *must* be a Value::ValueByReference
-
-//     if workspace.debug_options.borrow().is_set(&DebugOption::Execution) {
-//         println!("{:?}", node);
-//     }
-
-//     match node {
-//         Node::Index(i) => execute_selection_by_reference(i, workspace),
-//         Node::IdentifierByValue(r) => execute_identifier_by_reference(r, workspace),
-//         Node::IdentifierByReference(r) => execute_identifier_by_reference(r, workspace),
-//         _ => Err(format!("Only variables and slices of variables can be assigned through the NONCOPY operator ")),
-//     }
-// }
+fn execute_exec_return(workspace: &WorkSpace) -> Result<(),String> {
+    match workspace.get_last_statement_value() {
+        Some(value) => workspace.push_value(&value),
+        None => workspace.push_value(&Value::Empty),
+    }
+    workspace.end_invocation();
+    Ok(())
+}
 
 fn execute_function(f: &Rc<FunctionDescription>, actual_argument_list: &Vec<usize>, workspace: &WorkSpace) -> Result<(),String> {
 
@@ -288,7 +256,7 @@ fn execute_operation(op: &OperationNode, workspace: &WorkSpace) -> Result<(),Str
                         return construct(d, op.get_actual_argument_list(), workspace);
                     },
                     crate::workspace::GeneralSymbol::Function(f) => {
-                        if f.is_compatible_function(op.get_actual_argument_list()) {
+                        if f.is_compatible_function(op.get_actual_argument_list().len()) {
                             return execute_function(f, op.get_actual_argument_list(), workspace);
                         }
                     },
@@ -305,6 +273,52 @@ fn execute_operation(op: &OperationNode, workspace: &WorkSpace) -> Result<(),Str
 
 fn execute_identifier_by_value(r: &ReferenceNode, workspace: &WorkSpace) -> Result<(),String> {
     workspace.push_value(&Value::from_reference(r, workspace)?);
+    Ok(())
+}
+
+fn execute_resolve_parameter(arg: &ArgumentDescription, workspace: &WorkSpace) -> Result<(), String> {
+    let symbols = workspace.try_get_functions(arg.function_name.as_str());
+    for symbol in symbols {
+        match &symbol {
+            GeneralSymbol::Datatype(_) => (),
+            GeneralSymbol::Function(f) => {
+                if f.is_compatible_function(arg.argument_count) {
+                    match f.arguments {
+                        FunctionArgumentList::Fixed(ref formal_args) => {
+                            if arg.argument_number >= formal_args.len() {
+                                return Err(format!("Incorrect number of arguments to {}", f.name));
+                            }
+                            let formal_arg = &formal_args[arg.argument_number];
+                            match formal_arg.mechanism {
+                                ArgumentMechanism::ByReference | ArgumentMechanism::ByReferenceCreateIfNeeded => (),
+                                ArgumentMechanism::ByValue => {
+                                    let formal_arg_datatype = workspace.resolve_datatype(&formal_arg.datatype.as_string())?;
+                                    workspace.push_value(&formal_arg_datatype.coerce(&workspace.pop_value(), workspace)?);
+                                },
+                            }
+                        },
+                        FunctionArgumentList::Varying(ref mechanism) => {
+                            match  mechanism {
+                                ArgumentMechanism::ByReference | ArgumentMechanism::ByReferenceCreateIfNeeded => (),
+                                ArgumentMechanism::ByValue => {
+                                    match workspace.pop_value() {
+                                        Value::Selector(ref selector) => return Err(format!("{} is not a value", selector)),
+                                        Value::Symbol(ref symbol) => workspace.push_value(&evaluate_identifier_by_value(symbol, workspace)?),
+                                        Value::ValueByReference(cell_ref) => workspace.push_value(&cell_ref.cell.borrow().as_ref_to_value().clone()),
+                                        Value::LogicalLink(link) => workspace.push_value(&link.as_ref_to_value().clone()),
+                                        value => workspace.push_value(&value),
+                                    }
+                                },
+                            }
+                        },
+                    }
+                    break;
+                }
+            },
+            GeneralSymbol::Selector(_) => (),
+            _ => panic!("internal error"),
+        }
+    } 
     Ok(())
 }
 
@@ -371,57 +385,6 @@ fn execute_selection_by_reference_internal(base_value: &Value, index: &Value, wo
         },
     }
 }
-
-// fn execute_selection_by_value(workspace: &WorkSpace) -> Result<(), String> {
-//     let mut index = workspace.pop_value();
-//     if let Value::Symbol(symbol) = &index {
-//         index = evaluate_identifier_by_value(symbol, workspace)?;
-//     }
-//     let mut base_value = workspace.pop_value();
-//     loop {
-//         match &base_value {
-//             Value::LogicalLink(l) => {
-//                 let temp = l.as_ref_to_value().clone();
-//                 base_value = temp;
-//             },
-//             Value::Sequence(seq) => {
-//                 return seq.access_cell_by_value(index.as_i32()?, workspace);
-//             },
-//             Value::Structure(structure) => {
-//                 if let Value::Selector(ref selector) = index {
-//                     return structure.access_field_by_value(selector, workspace);
-//                 } else {
-//                     return Err(format!("{} is not a field selector", index));
-//                 }
-//             },
-//             Value::Symbol(symbol) => {
-//                 match  symbol.as_symbol() {
-//                     GeneralSymbol::Variable(v) => {
-//                         match &*v.cell.borrow().as_ref_to_value() {
-//                             Value::Sequence(seq) => {
-//                                 return seq.access_cell_by_value(index.as_i32()?, workspace);
-//                             },
-//                             Value::Structure(structure) => {
-//                                 if let Value::Selector(selector) = &index {
-//                                     return structure.access_field_by_value(selector, workspace);
-//                                 } else {
-//                                     if workspace.debug_options.borrow().is_set(&crate::workspace::debug::DebugOption::DataConversion) {
-//                                         dbg!(&index);
-//                                     }
-//                                     return Err(format!("{} is not a field selector", index));
-//                                 }
-//                             },
-//                             _ => {},
-//                         }  
-//                     }
-//                     _ => {},
-//                 }
-//                 return Err(format!("{} is not indexable", &base_value));
-//             },
-//             _ => return Err(format!("{} is not indexable", &base_value)),
-//         }
-//     }
-// }
 
 fn execute_selector(s: &Rc<SelectorDescription>, actual_argument_list: &Vec<usize>, workspace: &WorkSpace) -> Result<(),String> {
     if actual_argument_list.len() != 1 {
@@ -512,64 +475,6 @@ pub fn execute_statement_end(workspace: &WorkSpace) -> Result<(),String> {
     Ok(())
 }
 
-// fn execute_statements_in_statement_block(workspace: &WorkSpace) -> Result<Value,String> {
-//     let mut result = Value::Empty;
-
-//     loop {
-//         let invocation = match workspace.current_invocation() {
-//             Some(inv) => inv,
-//             None => return Ok(result),
-//         };
-
-//         {
-//             if workspace.get_execution_sentinal().is_stop_requested() {
-//                 return Err(format!("interrupt!"));
-//             }
-//         }
-
-//         let mut current_statement = invocation.next_node();
-//         if current_statement.is_none() {
-//             invocation.end_statement_block();
-//             current_statement = invocation.next_node();
-//             if current_statement.is_none() {
-//                 workspace.end_invocation();
-//                 continue;
-//             }
-//         }
-
-//         let executable = &invocation.as_executable();
-//         let current_statement = current_statement.unwrap();
-
-//         if current_statement.is_stop_set() {
-//             let current_execution_state = invocation.get_execution_state();
-//             match current_execution_state {
-//                 ExecutionState::Stopped => {},
-//                 _ => {
-//                     invocation.set_execution_state(ExecutionState::Stopped);            
-//                     match invocation.get_fib() {
-//                         Some(fib) => return Err(format!("Stopped before {} [{}]", fib.function_description.as_string(), current_statement.as_line_number())),
-//                         None => return Err(format!("Stopped before [{}]", current_statement.as_line_number())),
-//                     }
-//                 },
-//             }
-//         }
-
-//         if workspace.debug_options.borrow().is_set(&DebugOption::Execution) {
-//             workspace.dump_invocation_stack();
-//         }
-
-//         invocation.set_execution_state(ExecutionState::Executing);
-//         result = execute(current_statement.as_root_node_index(), executable, workspace)?;
-//         invocation.set_execution_state(ExecutionState::NotExecuting);
-//         if current_statement.is_trace_set() {
-//             match invocation.get_fib() {
-//                 Some(fib) => println!("\n{}[{}] {}:   {}", fib.function_description.as_string(), current_statement.as_line_number(), current_statement.as_source(), result),
-//                 None => println!("\n[{}] {}:   {}", current_statement.as_line_number(), current_statement.as_source(), result),
-//             }
-//         }
-//     }
-// }
-
 fn execute_user_function(f: &Rc<FunctionDescription>, actual_argument_values: &Vec<Value>, workspace: &WorkSpace) -> Result<(),String> {
     functions::prepare_udf (f, actual_argument_values, workspace)?;
     functions::execute_udf (f, workspace)?;
@@ -583,4 +488,24 @@ fn execute_value(value: &Value, workspace: &WorkSpace) -> Result<(),String> {
 
 fn execute_variable_reference_by_value(v: &Rc<VariableDescription>, workspace: &WorkSpace) -> Result<(),String> {
     execute_value(&*v.cell.borrow().as_ref_to_value(), workspace)
+}
+
+pub fn prepare(s: &str, workspace: &WorkSpace) -> Result<(),String> {
+    let parser = Parser::new(s, workspace);
+    let executable = parser.parse(s)?;
+    if workspace.debug_options.borrow().is_set(&DebugOption::Parse) {
+        dbg!(&executable);
+    }
+    sequencer::prepare_execution(&executable, workspace);
+    Ok(())
+}
+
+pub fn prepare_as_exec(s: &str, workspace: &WorkSpace) -> Result<(),String> {
+    let parser = Parser::new(s, workspace);
+    let executable = parser.parse_as_exec(s)?;
+    if workspace.debug_options.borrow().is_set(&DebugOption::Parse) {
+        dbg!(&executable);
+    }
+    sequencer::prepare_execution(&executable, workspace);
+    Ok(())
 }

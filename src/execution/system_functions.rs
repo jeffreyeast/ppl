@@ -1,20 +1,23 @@
 //  This module contains the implementation of the builtin system functions
 
 use std::{io::{self, Write, stdout}, process};
+
 use crate::{symbols::{ 
     metadata::{FunctionDescription, FunctionArgumentList, FormalArgument, FunctionImplementation, FunctionClass, MetaDataTypeName, ArgumentMechanism, VariableDescription}, 
     name::Name, datatype::is_assignable_to}, 
     workspace::{WorkSpace, GeneralSymbol}, lexical::LineNumber};
 use crate::execution::value::Value;
-use super::{evaluate_internal, value::{sequence::SequenceInstance, Cell, recursion_detector}};
+use super::{prepare_as_exec, value::{sequence::SequenceInstance, Cell, recursion_detector}};
 
 mod arithmetic;
+mod ardmode;
 mod comparison;
 mod debug;
 mod metadata;
 
 pub fn init(workspace: &WorkSpace) {
     arithmetic::init(workspace);
+    ardmode::init(workspace);
     comparison::init(workspace);
     debug::init(workspace);
     metadata::init(workspace);
@@ -164,7 +167,7 @@ pub fn init(workspace: &WorkSpace) {
                 FormalArgument { name: Name::from_str("s"), mechanism: ArgumentMechanism::ByValue,  datatype: MetaDataTypeName::from_str("string") }]), 
             local_variables: None,
             return_value: Some(MetaDataTypeName::from_str("string")), 
-            implementation_class: FunctionImplementation::System(FunctionClass::Monadic(exec)),
+            implementation_class: FunctionImplementation::System(FunctionClass::NullValuedMonadic(exec)),
             help_text: String::from("Evaluate a PPL expression") });
                 
     workspace.add_system_function(
@@ -328,9 +331,9 @@ fn debug_print(operand: &Value, _workspace: &WorkSpace) -> Result<(),String> {
 }
 
 
-fn exec(s: &Value, workspace: &WorkSpace) -> Result<Value,String>{
+fn exec(s: &Value, workspace: &WorkSpace) -> Result<(),String>{
     recursion_detector::Cycle::start();
-    Ok(SequenceInstance::construct_string_sequence(&evaluate_internal(&s.as_string(), workspace)?))
+    prepare_as_exec(s.as_string().as_str(), workspace)
 }
 
 fn exit(args: &Vec<Value>, _workspace: &WorkSpace) -> Result<Value,String> {
@@ -475,14 +478,18 @@ fn print(args: &Vec<Value>, workspace: &WorkSpace) -> Result<(),String> {
 
     recursion_detector::Cycle::start();
 
-    match *workspace.get_alternate_print_destinatin() {
-        Some(ref mut cursor) => {
-            cursor.write(result.as_bytes()).map_err(|e| format!("{}", e))?;
-        },
-        None => {
-            write!(stdout(), "{}", result).map_err(|e| format!("{}", e))?;
-            stdout().flush().map_err(|e| format!("{}", e))?;
-        },
+    if workspace.is_in_graphics_mode() {
+        workspace.get_graphics_context().print(result)?;
+    } else {
+        match *workspace.get_alternate_print_destinatin() {
+            Some(ref mut cursor) => {
+                cursor.write(result.as_bytes()).map_err(|e| format!("{}", e))?;
+            },
+            None => {
+                write!(stdout(), "{}", result).map_err(|e| format!("{}", e))?;
+                stdout().flush().map_err(|e| format!("{}", e))?;
+            },
+        }
     }
 
     Ok(())

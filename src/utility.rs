@@ -1,6 +1,7 @@
 // Holds useful routines
 
 use core::fmt;
+use std::sync::{Condvar, Arc, Mutex};
 use num_traits::Num;
 
 
@@ -275,5 +276,39 @@ impl<T: Num + Ord + Copy + fmt::Display> SetIterationToken<T> {
 
     pub fn set_next_value(&mut self, new_value: Option<T>) {
         self.next_value = new_value;
+    }
+}
+
+
+
+//  The Event structure is used to synchronize two threads, so that one will wait until the other has performed some action
+
+#[derive(Debug)]
+pub struct Event {
+    mutex: Mutex<bool>,
+    cvar: Condvar,
+}
+
+impl Event {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Event { mutex: Mutex::new(false), cvar: Condvar::new() })
+    }
+
+    pub fn reset(&self) {
+        let mut done = self.mutex.lock().unwrap();
+        *done = false;
+    }
+
+    pub fn signal(&self) {
+        let mut done = self.mutex.lock().unwrap();
+        *done = true;
+        self.cvar.notify_one();
+    }
+
+    pub fn wait(&self) {
+        let mut done = self.mutex.lock().unwrap();
+        while !*done {
+            done = self.cvar.wait(done).unwrap();
+        }
     }
 }

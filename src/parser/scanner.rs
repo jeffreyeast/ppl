@@ -14,8 +14,8 @@ pub struct TokenScanner<'a> {
 }
 
 impl<'a> TokenScanner<'a> {
-    fn construct_eol_token(&mut self) -> &Token {
-        self.eol_token = Token { token_type: TokenType::EOL, string_value: String::from(""), starting_position: self.position.clone() };
+    fn construct_eol_token(&mut self, position: TokenPosition) -> &Token {
+        self.eol_token = Token { token_type: TokenType::EOL, string_value: String::from(""), starting_position: position };
         &self.eol_token
     }
 
@@ -174,14 +174,14 @@ impl<'a> TokenScanner<'a> {
         match t {
             Some(t) => {
                 if let TokenType::Comment = t.token_type {
-                    Some(self.construct_eol_token())
+                    Some(self.construct_eol_token(t.starting_position.clone()))
                 } else {
                     self.position = t.starting_position.clone();
                     Some(t)
                 }
             },
             None => {
-                Some(self.construct_eol_token())
+                Some(self.construct_eol_token(self.position.clone()))
             },
         }
     }
@@ -191,13 +191,14 @@ impl<'a> TokenScanner<'a> {
         match t {
             Some(t) => {
                 if let TokenType::Comment = t.token_type {
-                    Some(self.construct_eol_token())
+                    let p = t.starting_position.clone();
+                    Some(self.construct_eol_token(p))
                 } else {
                     Some(*t)
                 }
             },
             None => {
-                Some(self.construct_eol_token())
+                Some(self.construct_eol_token(self.position.clone()))
             },
         }
     }

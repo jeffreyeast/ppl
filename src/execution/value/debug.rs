@@ -2,6 +2,8 @@
 
 use std::{fmt, rc::Rc, cell::RefCell};
 
+use crate::utility::convert_escape_sequences;
+
 use super::{Cell, sequence::SequenceInstance, structure::{SelectorInstance, StructureInstance, StructureInstanceMember}, SymbolicReference, Value, ValueEnvelope};
 
 thread_local! {
@@ -58,21 +60,30 @@ impl fmt::Debug for Cell {
 
 impl fmt::Debug for SequenceInstance {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let base_indentation = INDENTATION.with(|i| i.borrow().clone());
-        let my_indentation = base_indentation.clone() + "    ";
-        INDENTATION.with(|i| *i.borrow_mut() = my_indentation.clone() + "    ");
-
-        writeln!(f, "DT: {}, LB: {}, Values: [", self.as_datatype(), self.lower_bound())?;
-        for v in &*self.as_values() {
-            write!(f, "{}SC/WC: {}/{} Ptr: {:x} Val: ({:?}", my_indentation, Rc::<RefCell<Cell>>::strong_count(v), Rc::<RefCell<Cell>>::weak_count(v), std::ptr::addr_of!(*v.borrow()) as usize, *v.borrow())?;
-            match &*v.borrow().as_ref_to_value() {
-                Value::Sequence(_) | Value::Structure(_) => writeln!(f, "{})", my_indentation)?,
-                _ => writeln!(f, ")")?,
+        if self.as_datatype().as_string().as_str() == "string" {
+            let mut result = String::new();
+            for c in &*self.as_values() {
+                result.push(c.borrow().contents.value.borrow().as_char().expect("strings must have Value::Char cells"));
             }
-        }
-        writeln!(f, "{}]", my_indentation)?;
+            write!(f, "\"{}\"", convert_escape_sequences(result.as_str()))?;
+        } else {
+            let base_indentation = INDENTATION.with(|i| i.borrow().clone());
+            let my_indentation = base_indentation.clone() + "    ";
+            INDENTATION.with(|i| *i.borrow_mut() = my_indentation.clone() + "    ");
 
-        INDENTATION.with(|i| *i.borrow_mut() = base_indentation);
+            writeln!(f, "DT: {}, LB: {}, Values: [", self.as_datatype(), self.lower_bound())?;
+            for v in &*self.as_values() {
+                write!(f, "{}SC/WC: {}/{} Ptr: {:x} Val: ({:?}", my_indentation, Rc::<RefCell<Cell>>::strong_count(v), Rc::<RefCell<Cell>>::weak_count(v), std::ptr::addr_of!(*v.borrow()) as usize, *v.borrow())?;
+                match &*v.borrow().as_ref_to_value() {
+                    Value::Sequence(_) | Value::Structure(_) => writeln!(f, "{})", my_indentation)?,
+                    _ => writeln!(f, ")")?,
+                }
+            }
+            writeln!(f, "{}]", my_indentation)?;
+
+            INDENTATION.with(|i| *i.borrow_mut() = base_indentation);
+        }
+
         Ok(())
     } 
 }

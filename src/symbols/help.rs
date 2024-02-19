@@ -9,6 +9,7 @@ use super::{metadata::{FunctionArgumentList, FunctionDescription, FunctionImplem
 
 pub trait Help {
     fn help_text(&self, workspace: &WorkSpace) -> Option<String>;
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize;
     fn pretty_print(&self) -> String;
     fn show_help(&self, name: &str, workspace: &WorkSpace) -> Result<Value,String>;
 }
@@ -34,6 +35,16 @@ impl Help for GeneralSymbol {
             GeneralSymbol::Selector(s) => s.help_text (workspace),
             GeneralSymbol::Variable(v) => v.help_text (workspace),
             GeneralSymbol::Unresolved(_) => None
+        }
+    }
+
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self {
+            GeneralSymbol::Datatype(d) => d.help_text_len (workspace),
+            GeneralSymbol::Function(f) => f.help_text_len (workspace),
+            GeneralSymbol::Selector(s) => s.help_text_len (workspace),
+            GeneralSymbol::Variable(v) => v.help_text_len (workspace),
+            GeneralSymbol::Unresolved(_) => 0,
         }
     }
 
@@ -64,6 +75,13 @@ impl FormalArgument {
 impl Help for FunctionDescription {
     fn help_text(&self, _workspace: &WorkSpace) -> Option<String> {
         Some(self.help_text.clone())
+    }
+
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
     }
 
     fn pretty_print(&self) -> String {
@@ -177,6 +195,13 @@ impl Help for SelectorDescription {
         Some(String::from("selects a field in a structure"))
     }
 
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
+    }
+
     fn pretty_print(&self) -> String {
         format!("{:?}", self)
     }
@@ -194,6 +219,13 @@ impl Help for VariableDescription {
 
     fn help_text(&self, workspace: &WorkSpace) -> Option<String> {
         self.cell.borrow().as_ref_to_value().help_text(workspace)
+    }
+
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
     }
 
     fn show_help(&self, _name: &str, workspace: &WorkSpace) -> Result<Value,String> {

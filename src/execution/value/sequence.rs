@@ -217,6 +217,7 @@ impl SequenceInstance {
     
     pub fn construct_string_sequence(v: &str) -> Value {
         let mut characters = Vec::new();
+        characters.reserve(v.len());
         for c in v.chars() {
             characters.push(Cell::new(Value::Char(c)));
         }

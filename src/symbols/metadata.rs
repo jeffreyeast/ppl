@@ -126,9 +126,9 @@ impl FunctionDescription {
             self.name.as_string()
         }
 
-        pub fn is_compatible_function(&self, actual_argument_list: &Vec<usize>) -> bool {
+        pub fn is_compatible_function(&self, actual_argument_list_length: usize) -> bool {
             if let FunctionArgumentList::Fixed(fixed) = &self.arguments {
-                fixed.len() == actual_argument_list.len()
+                fixed.len() == actual_argument_list_length
             } else {
                 true
             }
@@ -325,6 +325,13 @@ impl MetaDataType {
 impl Help for MetaDataType {
     fn help_text(&self, workspace: &WorkSpace) -> Option<String> {
         self.root_data_type.help_text(workspace)
+    }
+
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
     }
 
     fn pretty_print(&self) -> String {

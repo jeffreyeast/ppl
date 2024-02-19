@@ -183,6 +183,13 @@ impl Help for Value {
         RootDataType::from_value(self, workspace).unwrap().help_text(workspace)
     }
 
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
+    }
+
     fn pretty_print(&self) -> String {
         self.as_string()
     }
@@ -201,6 +208,13 @@ pub struct ValueEnvelope {
 impl Help for ValueEnvelope {
     fn help_text(&self, workspace: &WorkSpace) -> Option<String> {
         self.value.borrow().help_text(workspace)        
+    }
+
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
     }
 
     fn pretty_print(&self) -> String {
@@ -244,6 +258,13 @@ pub struct Cell {
 impl Help for Cell {
     fn help_text(&self, workspace: &WorkSpace) -> Option<String> {
         self.contents.help_text(workspace)
+    }
+
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
     }
 
     fn pretty_print(&self) -> String {

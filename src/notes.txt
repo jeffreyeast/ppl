@@ -48,3 +48,16 @@ not after the final line of the function.
     language, yes. Right now, nested statement blocks just don't work. 
 26. ^C detection should only be done on statement boundaries; otherwise the value stack will get messed up when they resume the function
 27. IF <cond> <\n> <eos> doesn't generate a syntax error.  Probably because parse_statement_internal accepts empty lines.
+28. Graphics is a little screwed up -- it works because Draw is being called synchronously after Execute, so current_x/y are being tracked correctly. But it
+    wouldn't work if Draw weren't called immediately.
+29. FIXED (1/23/2024) Edit a function, but introduce a syntax error -- you lose the entire function:-(    
+30. FIXED (1/24/2024) Regression: a_? fails to parse, because ? is seen as a monadic operator, rather than a nullary operator
+31. The function editor (using notepad) is clunky 
+32. How do you create a substring?
+33. FIXED (2/1/2024) BUG: print(exec(??),"\n") should end the invocation of exec, and then exec should return. But this isn't happening: what's happening is we execute the string
+    from the ?? operator, then move onto push the carriage return literal -- never pushing on the results of the exec. Boom.
+34. BUG: the same problem as 33 exists for everyone who calls evaluate_identifier_by_value -- if there's a STOP requested for a function being evaluated, the
+    execution stack and node sequencer will get out of alignment. 
+35. BUG: You can't use function calls in constructors 
+36. FIXED (2/7/2024) BUG: When you edit a function, its line numbers are offset by 1. This affects STOP and TRACE.
+37. When you use STOP and execute a function, any error resets the state and you can't continue to execute the function

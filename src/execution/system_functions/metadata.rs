@@ -62,7 +62,7 @@ pub fn init(workspace: &WorkSpace) {
             arguments: FunctionArgumentList::Varying(ArgumentMechanism::ByReference), 
             local_variables: None,
             return_value: Some(MetaDataTypeName::from_str("general")), 
-            implementation_class: FunctionImplementation::System(FunctionClass::Varying(edit)),
+            implementation_class: FunctionImplementation::System(FunctionClass::NullValuedVarying(edit)),
             help_text: String::from("Edit a definition") });
 
     workspace.add_system_function(
@@ -158,7 +158,7 @@ pub fn init(workspace: &WorkSpace) {
             arguments: FunctionArgumentList::Varying(ArgumentMechanism::ByReference), 
             local_variables: None,
             return_value: None, 
-            implementation_class: FunctionImplementation::System(FunctionClass::NullValuedNullary(dump_symbol_table)),
+            implementation_class: FunctionImplementation::System(FunctionClass::Nullary(dump_symbol_table)),
             help_text: String::from("Dump the symbol table") });
                                         
     workspace.add_system_function(
@@ -238,13 +238,12 @@ fn display(function: &Value, workspace: &WorkSpace) -> Result<Value,String> {
     }
 }
 
-fn dump_symbol_table(workspace: &WorkSpace) -> Result<(),String> {
-    workspace.dump_symbol_table();
-    Ok(())
+fn dump_symbol_table(workspace: &WorkSpace) -> Result<Value,String> {
+    Ok(workspace.dump_symbol_table())
 }
 
-fn edit(args: &Vec<Value>, workspace: &WorkSpace) -> Result<Value,String> {
-    let text:String;
+fn edit(args: &Vec<Value>, workspace: &WorkSpace) -> Result<(),String> {
+    let mut text:String;
     match args.len() {
         0 => text = String::new(),
         1 => {
@@ -269,20 +268,36 @@ fn edit(args: &Vec<Value>, workspace: &WorkSpace) -> Result<Value,String> {
         .map_err(|e| e.to_string())?
         .write_all(&text.as_bytes())
         .map_err(|e| e.to_string())?;
-    std::process::Command::new("notepad")
-        .arg(filename.as_str())
-        .output()
-        .map_err(|e| e.to_string())?;
-    let mut editted_text = String::new();
-    std::fs::File::open(filename.as_str())
-        .map_err(|e| e.to_string())?
-        .read_to_string(&mut editted_text)
-        .map_err(|e| e.to_string())?;
 
-    if args.len() == 1 {
-        erase(&vec![args[0].clone()], workspace)?;
+    loop {
+        std::process::Command::new("notepad")
+            .arg(filename.as_str())
+            .output()
+            .map_err(|e| e.to_string())?;
+        let mut editted_text = String::new();
+        std::fs::File::open(filename.as_str())
+            .map_err(|e| e.to_string())?
+            .read_to_string(&mut editted_text)
+            .map_err(|e| e.to_string())?;
+
+        if text == editted_text {
+            return Err(String::from("(no change)"));
+        } else {
+            if args.len() == 1 {
+                erase(&vec![args[0].clone()], workspace)?;
+            }
+            let result = super::exec(&SequenceInstance::construct_string_sequence(editted_text.as_str()), workspace);
+            match result {
+                Ok(_) => return result,
+                Err(e) => {
+                    println!("{}", e);
+                    //  Try to restore the non-editted version of the function
+                    _ = super::exec(&SequenceInstance::construct_string_sequence(text.as_str()), workspace);
+                    text = editted_text;
+                },
+            }
+        }
     }
-    super::exec(&SequenceInstance::construct_string_sequence(editted_text.as_str()), workspace)
 }
 
 fn erase(args: &Vec<Value>, workspace: &WorkSpace) -> Result<(),String> {
@@ -301,6 +316,7 @@ fn false_value(_workspace: &WorkSpace) -> Result<Value, String> {
 }
 
 fn get_type(operand: &Value, _workspace: &WorkSpace) -> Result<Value,String> {
+    dbg!(operand);
     Ok(SequenceInstance::construct_string_sequence(&operand.as_datatype()?))
 }
 

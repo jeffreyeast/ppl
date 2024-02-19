@@ -1,5 +1,7 @@
 //  This module holds the PPL system function implementations for arithmetic
 
+use rand::Rng;
+
 use crate::{workspace::WorkSpace, symbols::{metadata::{FunctionDescription, FormalArgument, ArgumentMechanism, MetaDataTypeName, FunctionImplementation, FunctionClass, FunctionArgumentList}, name::Name, datatype::{RootDataType, strongest_datatype}}, execution::value::Value};
 
 
@@ -98,7 +100,18 @@ pub fn init(workspace: &WorkSpace) {
             return_value: Some(MetaDataTypeName::from_str("ARITH")), 
             implementation_class: FunctionImplementation::System(FunctionClass::Diadic(add)),
             help_text: String::from("Add two values") });
-                        
+
+    workspace.add_system_function(
+        "cos", 
+        FunctionDescription { 
+            name: Name::from_str("cos"), 
+            arguments: FunctionArgumentList::Fixed(vec![
+                FormalArgument { name: Name::from_str("operand"), mechanism: ArgumentMechanism::ByValue,  datatype: MetaDataTypeName::from_str("arith") }]), 
+            local_variables: None,
+            return_value: Some(MetaDataTypeName::from_str("arith")), 
+            implementation_class: FunctionImplementation::System(FunctionClass::Monadic(cosine)),
+            help_text: String::from("Cosine of a value") });
+                                
     workspace.add_system_function(
         "div", 
         FunctionDescription { 
@@ -158,6 +171,28 @@ pub fn init(workspace: &WorkSpace) {
             help_text: String::from("Raise a value to a power") });
 
     workspace.add_system_function(
+        "random", 
+        FunctionDescription { 
+            name: Name::from_str("random"), 
+            arguments: FunctionArgumentList::Fixed(vec![
+                FormalArgument { name: Name::from_str("operand"), mechanism: ArgumentMechanism::ByValue,  datatype: MetaDataTypeName::from_str("arith") }]), 
+            local_variables: None,
+            return_value: Some(MetaDataTypeName::from_str("int")), 
+            implementation_class: FunctionImplementation::System(FunctionClass::Monadic(random)),
+            help_text: String::from("0 <= Random integer < the operand") });
+        
+    workspace.add_system_function(
+        "sin", 
+        FunctionDescription { 
+            name: Name::from_str("sin"), 
+            arguments: FunctionArgumentList::Fixed(vec![
+                FormalArgument { name: Name::from_str("operand"), mechanism: ArgumentMechanism::ByValue,  datatype: MetaDataTypeName::from_str("arith") }]), 
+            local_variables: None,
+            return_value: Some(MetaDataTypeName::from_str("arith")), 
+            implementation_class: FunctionImplementation::System(FunctionClass::Monadic(sine)),
+            help_text: String::from("Sine of a value") });
+        
+    workspace.add_system_function(
         "sub", 
         FunctionDescription { 
             name: Name::from_str("sub"), 
@@ -184,6 +219,9 @@ fn add(left: &Value, right: &Value, workspace: &WorkSpace) -> Result<Value,Strin
     }
 }
 
+fn cosine(operand: &Value, _workspace: &WorkSpace) -> Result<Value,String> {
+    Ok(Value::Double(operand.as_f64()?.cos()))
+}
 
 fn divide(left: &Value, right: &Value, workspace: &WorkSpace) -> Result<Value,String> {
     let value_list = [RootDataType::from_value(left, workspace)?, RootDataType::from_value(right, workspace)?];
@@ -251,6 +289,14 @@ fn power(left: &Value, right: &Value, workspace: &WorkSpace) -> Result<Value,Str
         RootDataType::Dbl => Ok(Value::Double(left.as_f64()?.powf(right.as_f64()?))),
         _ => Err(format!("unsupported datatype for arithmetic")),
     }
+}
+
+fn random(operand: &Value, _workspace: &WorkSpace) -> Result<Value,String> {
+    Ok(Value::Int(rand::thread_rng().gen_range(0..operand.as_i32()?)))
+}
+
+fn sine(operand: &Value, _workspace: &WorkSpace) -> Result<Value,String> {
+    Ok(Value::Double(operand.as_f64()?.sin()))
 }
 
 fn subtract(left: &Value, right: &Value, workspace: &WorkSpace) -> Result<Value,String> {

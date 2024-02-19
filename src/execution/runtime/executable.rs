@@ -1,7 +1,7 @@
 //  This module holds the definitions of the Executable structure.
 
 use core::fmt;
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{parser::tree::{Node, PrettyPrint}, lexical::LineNumber, utility::{convert_escape_sequences, Set}};
 
@@ -9,10 +9,11 @@ use super::statement::Statement;
 
 
 pub struct Executable {
-    source: String,                             //  The source string that was parsed
-    statements: Vec<Rc<Statement>>,             //  The parsed statements
-    node_list: Vec<Rc<Node>>,                       //  The parse tree
-    function_return_line_number: Option<LineNumber>,  //  The origin-0 index of the function return node
+    source: String,                                     //  The source string that was parsed
+    statements: Vec<Rc<Statement>>,                     //  The parsed statements
+    node_list: Vec<Rc<Node>>,                           //  The parse tree
+    statements_by_node_index_table: HashMap<usize, Rc<Statement>>,
+    function_return_line_number: Option<LineNumber>,    //  The origin-0 index of the function return node
 }
 
 
@@ -33,6 +34,16 @@ impl Executable {
         self.source.as_str()
     }
 
+    pub fn commit(&mut self) {
+        // Build the node index -> statement table
+
+        for s in &self.statements {
+            for i in s.as_node_indices().iter() {
+                self.statements_by_node_index_table.insert(i, s.clone());
+            }
+        }
+    }
+
     pub fn get_function_return_line_number(&self) -> Option<LineNumber> {
         return self.function_return_line_number
     }
@@ -50,22 +61,10 @@ impl Executable {
     }
 
     pub fn get_statement_from_node_index(&self, node_index: usize) -> Option<Rc<Statement>> {
-        let mut low:i32 = 0;
-        let mut high:i32 = self.statements.len() as i32;
-
-        while low <= high {
-            let target = ((low + high) / 2) as usize;
-            if self.statements[target].as_node_indices().contains(node_index) {
-                return Some(self.statements[target].clone());
-            }
-            if node_index < self.statements[target].as_first_node_index() {
-                high = target as i32 - 1;
-            } else {
-                low = target as i32 + 1;
-            }
+        match self.statements_by_node_index_table.get(&node_index) {
+            Some(s) => Some(s.clone()),
+            None => None,
         }
-
-        None
     }
 
     pub fn get_node(&self, index: usize) -> Rc<Node> {
@@ -114,13 +113,17 @@ impl Executable {
         if node_index == statement.as_first_node_index() {
             return true;
         }
-        if let Node::StatementLabel(_) = self.get_node(statement.as_first_node_index()).as_ref() {
-            match statement.as_second_node_index() {
-                Some(second_node_index) => return node_index == second_node_index,
-                None => {},
-            }
-        }
+        // if let Node::StatementLabel(_) = self.get_node(statement.as_first_node_index()).as_ref() {
+        //     match statement.as_second_node_index() {
+        //         Some(second_node_index) => return node_index == second_node_index,
+        //         None => {},
+        //     }
+        // }
         return false;
+    }
+
+    pub fn is_last_executable_node(&self, statement: &Rc<Statement>, node_index: usize) -> bool {
+        node_index == statement.as_last_node_index()
     }
 
     pub fn is_line_number_valid(&self, line_number: LineNumber) -> bool {
@@ -128,7 +131,12 @@ impl Executable {
     }
 
     pub fn new(source: &str) -> Executable {
-        Executable { source: String::from(source), statements: Vec::new(), node_list: Vec::new(), function_return_line_number: None }
+        Executable { 
+            source: String::from(source), 
+            statements: Vec::new(), 
+            node_list: Vec::new(), 
+            statements_by_node_index_table: HashMap::new(),
+            function_return_line_number: None }
     }
 
     pub fn process_on_each_statement(&self, processor: fn(statement: Rc<Statement>)) {

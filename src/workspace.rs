@@ -20,6 +20,7 @@ use crate::execution::sentinal::ExecutionSentinal;
 use crate::execution::system_functions;
 use crate::execution::value::Value;
 use crate::execution::value::sequence::SequenceInstance;
+use crate::graphics::GraphicsContext;
 use crate::stack_ptr;
 use crate::symbols::datatype::RootDataType;
 use crate::symbols::help::Help;
@@ -51,6 +52,7 @@ pub mod options;
     format_parser: crate::execution::value::format::format_parser::Parser,
     floating_point_parser: crate::execution::value::format::floating_point::Parser,
     alternate_print_destination: RefCell<Option<Cursor<Vec<u8>>>>,
+    graphics_context: Arc<GraphicsContext>,
     pub debug_options: RefCell<Options<DebugOption>>,
     pub features: RefCell<Options<Feature>>,
     pub execution_sentinal: RefCell<ExecutionSentinal>,
@@ -59,6 +61,10 @@ pub mod options;
 impl Help for Rc<FunctionDescription> {
     fn help_text(&self, workspace: &WorkSpace) -> Option<String> {
         self.deref().help_text(workspace)
+    }
+
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        self.deref().help_text_len(workspace)
     }
 
     fn pretty_print(&self) -> String {
@@ -79,6 +85,13 @@ impl Help for RefCell<Vec<Rc<FunctionDescription>>> {
             separator = "\n   - ";
         }
         Some(help_text)
+    }
+
+    fn help_text_len(&self, workspace: &WorkSpace) -> usize {
+        match self.help_text(workspace) {
+            Some(help_text) => help_text.len(),
+            None => 0,
+        }
     }
 
     fn pretty_print(&self) -> String {
@@ -136,12 +149,23 @@ impl crate::symbols::metadata::Metadata for  GeneralSymbol {
 
 
 impl WorkSpace {
-    pub fn dump_symbol_table(&self) {
-        dbg!(self.datatype_symbol_table.borrow());
-        //dbg!(self.system_function_symbol_table.borrow());
-        dbg!(self.user_function_symbol_table.borrow());
-        dbg!(self.selector_symbol_table.borrow());
-        dbg!(self.variable_symbol_table.borrow());
+    pub fn dump_symbol_table(&self)  -> Value {
+        // dbg!(self.datatype_symbol_table.borrow());
+        // dbg!(self.system_function_symbol_table.borrow());
+        // dbg!(self.user_function_symbol_table.borrow());
+        // dbg!(self.selector_symbol_table.borrow());
+        // dbg!(self.variable_symbol_table.borrow());
+
+        let mut result = String::from("Datatypes:\n");
+        result += self.datatype_symbol_table.borrow().dump().as_str();
+
+        result += "Variables:\n";
+        result += self.variable_symbol_table.borrow().dump().as_str();
+
+        result += "Functions:\n";
+        result += self.user_function_symbol_table.borrow().dump().as_str();
+
+        SequenceInstance::construct_string_sequence(result.as_str())
     }
     
     pub fn new() -> WorkSpace {
@@ -158,6 +182,7 @@ impl WorkSpace {
             format_parser: crate::execution::value::format::format_parser::Parser::new(),
             floating_point_parser: crate::execution::value::format::floating_point::Parser::new(),
             alternate_print_destination: RefCell::new(None),
+            graphics_context: GraphicsContext::new(),
             debug_options: RefCell::new(DebugOption::new()),
             features: RefCell::new(Feature::new()),
             execution_sentinal: RefCell::new(ExecutionSentinal::new()) };
@@ -256,9 +281,13 @@ impl WorkSpace {
     }
 
     pub fn dump_value_stack(&self) {
-        println!("Value stack:");
-        for i in (0..self.value_stack.borrow().len()).rev() {
-             println!("[{}]: {:?}", i, &self.value_stack.borrow()[i]);
+        if self.value_stack.borrow().len() == 0 {
+            println!("Value stack: <empty>");
+        } else {
+            println!("Value stack:");
+            for i in (0..self.value_stack.borrow().len()).rev() {
+                 println!("[{}]: {:?}", i, &self.value_stack.borrow()[i]);
+            }
         }
     }
 
@@ -294,6 +323,10 @@ impl WorkSpace {
         &self.format_parser
     }
 
+    pub fn get_graphics_context(&self) -> Arc<GraphicsContext> {
+        self.graphics_context.clone()
+    }
+
     pub fn get_last_statement_value(&self) -> Option<Value> {
         match &*self.last_statement_value.borrow() {
             Some(value) => Some(value.clone()),
@@ -324,10 +357,15 @@ impl WorkSpace {
     }
     
     fn init(&self) {
+        self.features.borrow_mut().set(optional_features::Feature::Ardmode);
         self.features.borrow_mut().set(optional_features::Feature::LineNames);
         self.features.borrow_mut().set(optional_features::Feature::StringEscapes);
         system_functions::init(&self);
         metadata::init(&self);
+    }
+    
+    pub fn is_in_graphics_mode(&self) -> bool {
+        self.graphics_context.is_in_graphics_mode()
     }
 
     pub fn pop_value(&self) -> Value {
@@ -505,7 +543,10 @@ impl WorkSpace {
                 stack.truncate(min_stack_size);
                 result
             },
-            _ => panic!("internal error -- value stack not emptied")
+            _ => {
+                dbg!(stack);
+                panic!("internal error -- value stack not emptied");
+            }
         }
     }
 

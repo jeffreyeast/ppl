@@ -1,0 +1,252 @@
+$board = [1:3] row
+$coordinate = [r:int, c:int]
+$possible.move = [position:coordinate, score:int]
+$result = [value:general, error:bool]
+$row = [1:3] char
+{
+$parse.coordinate(string) ;r, c
+string_trim(string)
+r_parse.num(string)
+(length(string) < 1)-->invalid
+(string[1] # ',)-->invalid
+string_right(string,2)
+c_parse.num(string)
+(r[error])-->failed
+(c[error])-->failed
+parse.coordinate_result(coordinate(r[value], c[value]), false)
+-->0
+ 
+invalid: print("? invalid coordinate")
+failed: parse.coordinate_result(0, true)
+
+}
+{
+$get.move(the.board, side) ;move, r1, c1
+print.board(the.board)
+retry: print("\nEnter ", side, " move (row,col): ")
+move_parse.coordinate(?)
+(move[error])-->retry
+r1_move[value][r]
+c1_move[value][c]
+((r1 < 1) ! (r1 > 3) ! (c1 < 1) ! (c1 > 3))-->invalid.move
+(the.board[r1,c1] # ' )-->invalid.move
+done: get.move_move
+-->0
+invalid.move: print("? Invalid move")
+-->retry
+}
+{
+$score.board(the.board,my.side,other.side) 
+...	100 my.side won
+...	-100 other.side won
+...	0 indecisive
+...	10 cat game
+
+won(the.board,my.side)-->perfect
+won(the.board,other.side)-->horrible
+cat(the.board)-->cat.game
+score.board_0
+-->0
+
+cat.game: score.board_10
+-->0
+
+perfect: score.board_100
+-->0
+
+horrible: score.board_-100
+-->0
+ 
+}
+{
+$print.board(the.board)
+print("+---+---+---+\n")
+print("| ", the.board[1,1], " + ", the.board[1,2], " + ", the.board[1,3], " |\n")
+print("+---+---+---+\n")
+print("| ", the.board[2,1], " + ", the.board[2,2], " + ", the.board[2,3], " |\n")
+print("+---+---+---+\n")
+print("| ", the.board[3,1], " + ", the.board[3,2], " + ", the.board[3,3], " |\n")
+print("+---+---+---+\n")
+
+}
+{
+$play.machine ;the.board, x.move, o.move
+the.board_reset.board
+loop: x.move_get.move(the.board, 'x)
+the.board[x.move[value][r],x.move[value][c]]_'x
+(won(the.board, 'x))-->x.won
+o.move_choose.next.move(the.board, 'o, 'x)
+o.move[error]-->cat.game
+the.board[o.move[value][position][r],o.move[value][position][c]]_'o
+(won(the.board, 'o))-->o.won
+(cat(the.board))-->cat.game
+-->loop
+
+cat.game: print.board(the.board)
+print("Cat game!")
+-->0
+
+o.won: print.board(the.board)
+print("O wins!")
+-->0
+
+x.won: print.board(the.board)
+print("X wins!")
+-->0
+}
+{
+$parse.num($string);value,digit
+(length(string) < 1)-->missing.number
+digit_string[1]
+((digit < '0) ! (digit > '9))-->invalid.number
+value_0
+loop: value_(value * 10) + (int(digit) - int('0))
+string_right(string,2)
+(length(string) < 1)--> done
+digit_string[1]
+((digit >= '0) & (digit <= '9)) -->loop
+
+done: parse.num_result(value,false)
+-->0
+
+invalid.number:print("? invalid digit\n")
+-->failed
+
+missing.number: print("? missing number\n")
+failed: parse.num_result(0,true)
+-->0
+}
+{
+$cat(the.board) ;r1, c1
+r1_1
+r.loop: c1_1
+c.loop: (the.board[r1, c1] = ' )-->not.cat
+c1_c1 + 1
+(c1 <= 3)-->c.loop
+r1_r1 + 1
+(r1 <= 3)-->r.loop
+cat_true
+--> 0
+not.cat: cat_false
+-->0
+}
+{
+$right(s,pos) ;i,temp
+temp_""
+i_pos
+loop: (i>length(s))-->done
+temp_concat(temp,string(s[i]))
+i_i+1
+-->loop
+done: right_temp
+
+}
+{
+$consider.move(the.board, r1, c1, my.side, other.side)  ;others.move, s
+...	Returns a Result (Possible.Move, error)
+...	Possible.Move is only valid if error is false
+...
+...	100 my.side won
+...	-100 other.side won
+...	indecisive
+...	10 cat game
+
+(the.board[r1,c1]#' )-->not.this.space
+the.board[r1,c1]_my.side
+s_score.board(the.board, my.side, other.side)
+(s#0)-->done
+
+others.move_choose.next.move(the.board, other.side, my.side)
+others.move[error]-->done
+s_others.move[value][score]
+s=10-->done
+s=-s
+
+done: consider.move_Result(Possible.Move(Coordinate(r1,c1),s), false)
+-->0
+
+not.this.space: consider.move_Result(Possible.Move(Coordinate(0,0),0), true)
+-->0
+
+}
+{
+$choose.next.move(the.board, my.side, other.side) ; r1, c1, best.move, move
+...Iterate over the empty positions, and choose the one that gives us the best score
+
+... Returns a Result, consisting of a PossibleMove and Error.
+... PossibleMove is only valid if Error is false
+
+...print("My.side: ", my.side, "  ", the.board,"\n")
+best.move_Result(Possible.Move(Coordinate(0,0),0), true)
+r1_1
+c1_1
+
+loop: move_consider.move(the.board, r1, c1, my.side, other.side)
+(move[error])-->not.this.space
+(best.move[error])-->good.move
+(move[value][score]<=best.move[value][score])-->not.this.space
+good.move: best.move_move
+
+not.this.space: c1_c1 + 1
+(c1 <= 3)-->loop
+c1_1
+r1_r1 + 1
+(r1 <= 3)-->loop
+choose.next.move_best.move
+-->0
+}
+{
+$play ;the.board, x.move, o.move
+the.board_reset.board
+loop: x.move_get.move(the.board, 'x)
+the.board[x.move[value][r],x.move[value][c]]_'x
+(won(the.board, 'x))-->x.won
+o.move_get.move(the.board, 'o)
+the.board[o.move[value][r],o.move[value][c]]_'o
+(won(the.board, 'o))-->o.won
+(cat(the.board))-->cat.game
+-->loop
+
+cat.game: print.board(the.board)
+print("Cat game!")
+-->0
+
+o.won: print.board(the.board)
+print("O wins!")
+-->0
+
+x.won: print.board(the.board)
+print("X wins!")
+-->0
+}
+{
+$reset.board
+reset.board_board(row(' , ' , ' ),row(' , ' , ' ),row(' , ' , ' ))
+
+}
+{
+$trim(s) ;trimmed.string
+trimmed.string_""
+loop: (length(s) < 1)-->done
+(s[1] = ' )-->skip
+trimmed.string_concat(trimmed.string, string(s[1]))
+skip: s_right(s,2)
+-->loop
+ 
+done: trim_trimmed.string
+
+}
+{
+$won(the.board,side) ;i
+((the.board[1,1]=side) & (the.board[2,2]=side) & (the.board[3,3]=side)) --> did.win
+((the.board[1,3]=side) & (the.board[2,2]=side) & (the.board[3,1]=side)) --> did.win
+i_1
+loop: ((the.board[1,i] = side) & (the.board[2,i] = side) & (the.board[3,i] = side)) --> did.win
+((the.board[i,1] = side) & (the.board[i,2] = side) & (the.board[i,3] = side)) --> did.win
+i_i+1
+(i <= 3) --> loop
+won_false
+--> 0
+did.win: won_true
+
+}

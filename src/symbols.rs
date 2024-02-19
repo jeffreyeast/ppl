@@ -3,6 +3,7 @@
 use std::fmt;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::Instant;
 
 use crate::execution::value::Value;
 use crate::execution::value::sequence::SequenceInstance;
@@ -41,8 +42,30 @@ impl<T: Help> SymbolTable<T> {
         self.list.contains_key(name.to_ascii_lowercase().as_str())
     }
 
+    pub fn dump(&self) -> String {
+        let mut names = self.get_all_names();
+        names.sort();
+        let mut line = String::from("    ");
+        let mut result = String::new();
+        for name in &names {
+            let padding_count = 8 - (name.len() % 8);
+            line = format!("{}{}{}", line, name, " ".repeat(padding_count));
+            if line.len() >= 80 {
+                result += line.as_str();
+                result += "\n";
+                line = String::from("    ");
+            }
+        }
+        if line.len() > 4 {
+            result += line.as_str();
+            result += "\n";
+        }
+        result
+    }
+
     pub fn get_all(&self) -> Vec<(String,Rc<T>)> {
         let mut result = Vec::new();
+        result.reserve(self.list.len());
         for homonyms in &self.list {
             result.push((homonyms.0.clone(), homonyms.1.clone()));
         }
@@ -51,6 +74,7 @@ impl<T: Help> SymbolTable<T> {
 
     pub fn get_all_names(&self) -> Vec<String> {
         let mut names = Vec::new();
+        names.reserve(self.list.len());
         for homonyms in &self.list {
             names.push(homonyms.0.clone());
         }
@@ -64,12 +88,22 @@ impl<T: Help> SymbolTable<T> {
 
         let mut symbols = self.get_all();
         symbols.sort_by(|a,b| a.0.cmp(&b.0));
-        
-        for (symbol_name, item) in symbols {
+
+        let mut total_space = 0;
+        for (symbol_name, item) in &symbols {
+            total_space += symbol_name.len() + item.help_text_len(workspace) + 4;
+        }
+        result.reserve(total_space);
+
+        for (symbol_name, item) in &symbols {
             result += format!("{} - {}\n", symbol_name, item.help_text(workspace).or(Some(String::from(""))).unwrap()).as_str();
         }
+        let t1 = Instant::now();
+        let v = SequenceInstance::construct_string_sequence(&result);
+        let t6 = t1.elapsed();
+        println!("t6={}", t6.as_millis());
 
-        Ok(SequenceInstance::construct_string_sequence(&result))
+        Ok(v)
     }
 
     pub fn new() -> SymbolTable<T> {
