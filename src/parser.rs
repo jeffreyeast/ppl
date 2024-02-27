@@ -40,12 +40,14 @@ impl<'a> Parser<'a> {
         let mut labels = HashMap::new();
         for statement_index in 1..=executable.get_statement_count() {
             let statement = executable.get_statement(statement_index).unwrap();
-            if let Node::StatementLabel(ref label_node) = executable.get_node(statement.as_first_node_index()).as_ref() {
-                let normalized_name = label_node.name.to_ascii_lowercase();
-                if labels.contains_key(&normalized_name) {
-                    return Err(format!("Statement label {} is duplicated", label_node.name));
+            if !statement.as_node_indices().is_empty() {
+                if let Node::StatementLabel(ref label_node) = executable.get_node(statement.as_first_node_index()).as_ref() {
+                    let normalized_name = label_node.name.to_ascii_lowercase();
+                    if labels.contains_key(&normalized_name) {
+                        return Err(format!("Statement label {} is duplicated", label_node.name));
+                    }
+                    labels.insert(normalized_name, statement.as_line_number());
                 }
-                labels.insert(normalized_name, statement.as_line_number());
             }
         }
 

@@ -8,7 +8,7 @@ use crate::lexical::{TokenType, Token, TokenPosition};
 
 pub struct TokenScanner<'a> {
     iterator: Peekable<std::slice::Iter<'a,Token>>,
-    saved_iterator: Option<Peekable<std::slice::Iter<'a,Token>>>,
+    saved_iterator_stack: Vec<Peekable<std::slice::Iter<'a,Token>>>,
     position: TokenPosition,
     eol_token: Token,
 }
@@ -138,11 +138,7 @@ impl<'a> TokenScanner<'a> {
     }
 
     pub fn discard_saved_iterator(&mut self) {
-        if self.saved_iterator.is_some() {
-            self.saved_iterator = None;
-        } else {
-            panic!("internal error");
-        }
+        let _ = self.saved_iterator_stack.pop().expect("Empty saved-iterator stack");
     }
 
     pub fn get_position(&self) -> TokenPosition {
@@ -164,7 +160,7 @@ impl<'a> TokenScanner<'a> {
     pub fn new(tokens: &'a Vec<Token>) -> Self {
         Self { 
             iterator: tokens.iter().peekable(), 
-            saved_iterator: None,
+            saved_iterator_stack: Vec::new(),
             position: TokenPosition { n:0, index: 0, line_number: 0, column: 0 }, 
             eol_token: Token { token_type: TokenType::EOL, string_value: String::from(""), starting_position: TokenPosition { n:0, index: 0, line_number: 0, column: 0 } } }
     }
@@ -248,20 +244,10 @@ impl<'a> TokenScanner<'a> {
     }
 
     pub fn pop_iterator(&mut self) {
-        match self.saved_iterator {
-            Some(ref iterator) => {
-                self.iterator = iterator.clone();
-                self.saved_iterator = None;
-            },
-            None => panic!("internal error"),
-        }
+        self.iterator = self.saved_iterator_stack.pop().unwrap();
     }
 
     pub fn push_iterator(&mut self) {
-        if self.saved_iterator.is_none() {
-            self.saved_iterator = Some(self.iterator.clone());
-        } else {
-            panic!("internal error");
-        }
+        self.saved_iterator_stack.push(self.iterator.clone());
     }
 }

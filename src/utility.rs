@@ -82,6 +82,10 @@ impl<T: Num + Ord + Copy + fmt::Display> Set<T> {
         false
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.members.len() == 0
+    }
+
     pub fn iter(&self) -> SetIterator<'_,T> {
         SetIterator::new(self)
     }
